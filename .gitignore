@@ -1,1 +1,6 @@
 .vscode/
+.env
+test/
+.noseids
+.pytest_cache/
+.startbot.pyc
