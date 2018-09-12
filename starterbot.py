@@ -3,7 +3,6 @@ import os
 import time
 import re
 import requests
-import json
 import sys
 import random
 import string
@@ -40,13 +39,16 @@ slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
 starterbot_id = None
 
 # constants
-RTM_READ_DELAY = 1 # 1 second delay between reading from RTM
+RTM_READ_DELAY = 1  # 1 second delay between reading from RTM
 MENTION_REGEX = "^<@(|[WU].+?)>(.*)"
+
 
 def parse_bot_commands(slack_events):
     """
-        Parses a list of events coming from the Slack RTM API to find bot commands.
-        If a bot command is found, this function returns a tuple of command and channel.
+        Parses a list of events coming from the Slack RTM API to
+        find bot commands.
+        If a bot command is found, this function returns a tuple of
+        command and channel.
         If its not found, then this function returns None, None.
     """
     for event in slack_events:
@@ -56,18 +58,22 @@ def parse_bot_commands(slack_events):
                 return message, event["channel"]
     return None, None
 
+
 def parse_direct_mention(message_text):
     """
-        Finds a direct mention (a mention that is at the beginning) in message text
-        and returns the user ID which was mentioned. If there is no direct mention, returns None
+        Finds a direct mention (a mention that is at the beginning) in
+        message text and returns the user ID which was mentioned.
+        If there is no direct mention, returns None
     """
     matches = re.search(MENTION_REGEX, message_text)
     # the first group contains the username, the second group contains the remaining message
-    return (matches.group(1), matches.group(2).strip()) if matches else (None, None)
+    return (matches.group(1),
+             matches.group(2).strip()) if matches else (None, None)
+
 
 def cleaning(text):
-    """This function takes what ever text is sent to Ashbot, and makes it all evenly spaced
-        lower case text without punctuation"""
+    """This function takes what ever text is sent to Ashbot, and makes
+        it all evenly spaced lower case text without punctuation"""
     exclude = set(string.punctuation)
 
     # remove new line and digits with regular expression
@@ -84,10 +90,11 @@ def cleaning(text):
     text = re.sub(r'\s+', ' ', text)
     # drop capitalization
     text = text.lower()
-    #remove white space around front and back
+    # remove white space around front and back
     text = text.strip()
 
     return text
+
 
 def handle_command(command, channel):
     global start_time
@@ -113,7 +120,7 @@ def handle_command(command, channel):
     # Finds and executes the given command, filling in response
     response = None
     # This is where you start to implement more commands!
-    if command == 'help':
+    if command.startswith('help'):
         response = help_response
 
     elif command == 'ping':
@@ -123,7 +130,7 @@ def handle_command(command, channel):
         response = "Hello friend."
 
     elif command == 'k':
-        response = "Don't 'k' me!"
+        response = "k"
 
     elif command == 'tell me a joke':
         response = "{}".format(random_joke)
@@ -146,13 +153,13 @@ def handle_command(command, channel):
 if __name__ == "__main__":
     channel_random_url = 'https://hooks.slack.com/services/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'
     channel_test_url = 'https://hooks.slack.com/services/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'
-    payload = {"text":"Hello, World!"}
+    payload = {"text": "Hello, World!"}
     start_time = time.time()
     if slack_client.rtm_connect(with_team_state=False):
         print("Ashbot connected and running!")
         # Read bot's user ID by calling Web API method `auth.test`
         starterbot_id = slack_client.api_call("auth.test")["user_id"]
-        r = requests.post(channel_test_url, json=payload )
+        r = requests.post(channel_test_url, json=payload)
 
         while running_flag:
             command, channel = parse_bot_commands(slack_client.rtm_read())
@@ -162,5 +169,3 @@ if __name__ == "__main__":
     else:
         print("Connection failed. Exception traceback printed above.")
         sys.exit()
-
-

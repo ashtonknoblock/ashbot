@@ -1,2 +1,6 @@
 Built in python 2.7. 
 Run the commamd 'pip install -r requirements.txt' to install nesessary dependencies. 
+
+When ran, this bot will announce itself to the Kenziebot slack on the 'bot-test' channel.
+It has a few basic commands you can try out. say '@ashbot help' in the channel to see what
+you can say.
