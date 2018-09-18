@@ -1,6 +1,8 @@
 .vscode/
 .env
-test/
+# test/
 .noseids
 .pytest_cache/
 startbot.pyc
+log.txt
+jokes.pyc

@@ -6,41 +6,57 @@ import requests
 import sys
 import random
 import string
+import logging
+import signal
+import jokes
 from slackclient import SlackClient
 
+# constants
+RTM_READ_DELAY = 1  # 1 second delay between reading from RTM
+MENTION_REGEX = "^<@(|[WU].+?)>(.*)"
+
+# while true, bot will be online and listening
 running_flag = True
+help_count = 0
+# Get random jokes from jokes.py...
+# NOT SURE if it will work if someone else tried dl-ing
+joke = jokes.jokes
 
-jokes = [
-    'I asked God for a bike, but I know God doesn’t work that way. So I stole a bike and asked for forgiveness.',
-    'Do not argue with an idiot. He will drag you down to his level and beat you with experience.',
-    'I want to die peacefully in my sleep, like my grandfather.. Not screaming and yelling like the passengers in his car.',
-    'The last thing I want to do is hurt you. But it’s still on the list.',
-    'Light travels faster than sound. This is why some people appear bright until you hear them speak.',
-    'If I agreed with you we’d both be wrong.',
-    'The early bird might get the worm, but the second mouse gets the cheese.',
-    'Politicians and diapers have one thing in common. They should both be changed regularly, and for the same reason.',
-    'A bus station is where a bus stops. A train station is where a train stops. On my desk, I have a work station..',
-    'Some people are like Slinkies … not really good for anything, but you can’t help smiling when you see one tumble down the stairs.',
-    'How is it one careless match can start a forest fire, but it takes a whole box to start a campfire?',
-    'To steal ideas from one person is plagiarism. To steal from many is research.',
-    'Artificial intelligence is no match for natural stupidity.',
-    'God must love stupid people. He made SO many.',
-    'My opinions may have changed, but not the fact that I am right.',
-    'You do not need a parachute to skydive. You only need a parachute to skydive twice.',
-    'Nostalgia isn’t what it used to be.',
-    'intend to live forever. So far, so good.',
-    'With sufficient thrust, pigs fly just fine'
-    ]
 
+# setup the logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler('log.txt')
+formatter = logging.Formatter(
+    "%(asctime)s: %(levelname)s:    %(message)s")
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 # instantiate Slack client
 slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
 # starterbot's user ID in Slack: value is assigned after the bot starts up
 starterbot_id = None
 
-# constants
-RTM_READ_DELAY = 1  # 1 second delay between reading from RTM
-MENTION_REGEX = "^<@(|[WU].+?)>(.*)"
+
+def signal_handler(sig_num, frame):
+    """
+            if we get a sigint or sigterm signal, exit program
+    """
+    global running_flag
+    global start_time
+    uptime = (time.time()-start_time)
+    sigint_log = """SIGINT signal detected... Ashbot disconnected.
+                \nUptime was {} seconds.\n\n""".format(uptime)
+
+    sigterm_log = """SIGTERM signal detected...Disconnected.
+                \nUptime was {} seconds.\n\n""".format(uptime)
+    if sig_num == signal.SIGINT:
+        logger.info(sigint_log)
+        running_flag = False
+    if sig_num == signal.SIGTERM:
+        running_flag = False
+        logger.info(sigterm_log)
+    return None
 
 
 def parse_bot_commands(slack_events):
@@ -63,109 +79,153 @@ def parse_direct_mention(message_text):
     """
         Finds a direct mention (a mention that is at the beginning) in
         message text and returns the user ID which was mentioned.
-        If there is no direct mention, returns None
+        If there is no direct mention, returns None.
     """
     matches = re.search(MENTION_REGEX, message_text)
-    # the first group contains the username, the second group contains the remaining message
+    if matches:
+        recieved_message = matches.group(2).strip()
+        logger.info("messege RECIEVED '{}'".format(recieved_message))
     return (matches.group(1),
-             matches.group(2).strip()) if matches else (None, None)
+            recieved_message) if matches else (None, None)
 
 
 def cleaning(text):
-    """This function takes what ever text is sent to Ashbot, and makes
-        it all evenly spaced lower case text without punctuation"""
-    exclude = set(string.punctuation)
+    """
+        Takes received message, and removes
+        new lines, punctuation, white space, and any capitalization
+    """
+    # don't parse special commands
+    if text != "As-salamu alaykum":
+        ex = set(string.punctuation)
 
-    # remove new line and digits with regular expression
-    text = re.sub(r'\n', '', text)
-    text = re.sub(r'\d', '', text)
-    # remove patterns matching url format
-    url_pattern = r'((http|ftp|https):\/\/)?[\w\-_]+(\.[\w\-_]+)+([\w\-\.,@?^=%&amp;:/~\+#]*[\w\-\@?^=%&amp;/~\+#])?'
-    text = re.sub(url_pattern, ' ', text)
-    # remove non-ascii characters
-    text = ''.join(character for character in text if ord(character) < 128)
-    # remove punctuations
-    text = ''.join(character for character in text if character not in exclude)
-    # standardize white space
-    text = re.sub(r'\s+', ' ', text)
-    # drop capitalization
-    text = text.lower()
-    # remove white space around front and back
-    text = text.strip()
+        # remove new line and digits with regular expression
+        text = re.sub(r'\n', '', text)
+        # remove non-ascii characters
+        text = ''.join(character for character in text if ord(character) < 128)
+        # remove punctuations
+        text = ''.join(character for character in text if character not in ex)
+        # standardize white space
+        text = re.sub(r'\s+', ' ', text)
+        # drop capitalization
+        text = text.lower()
+        # remove white space around front and back
+        text = text.strip()
 
+    else:
+        pass
     return text
 
 
 def handle_command(command, channel):
+    """
+        Executes bot command
+    """
+    global help_count
     global start_time
     global running_flag
-
-    random_joke = random.choice(jokes)
-
-    help_response = """*Available commands are:*\n
-        *help*-- display commands you can tell me.\n
-        *ping*-- check if/how long I've been active\n
-        *tell me a joke*-- you get it\n
-        *quit*-- make me exit and stop listening\n
-        *exit*-- same a quit\n
+    uptime = (time.time()-start_time)
+    random_joke = random.choice(joke)
+    help_response = """*Available commands are:*
+`help-- display commands you can tell me.`
+`ping-- check if/how long I've been active`
+`whats on your mind-- ???`
+`quit-- make me exit and stop listening`
+`exit-- same a quit`
     """
+    exit_response = """
+Life and destiny can steal my best friend away from me
+ but nothing can take away the precious memories.
+ Goodbye my friend.
+"""
     command = cleaning(command)
-
-    """
-        Executes bot command if the command is known
-    """
-    # Default response is help text for the user
-    default_response = "Not sure what you mean. Try *{}*.".format('help')
+    # default message for unknown message
+    default_response = "Not sure what you mean. Try *help*."
 
     # Finds and executes the given command, filling in response
     response = None
-    # This is where you start to implement more commands!
-    if command.startswith('help'):
-        response = help_response
+    # Here we can create our responses
+    if command == 'help' or command.startswith('help'):
+        if help_count == 0:
+            response = help_response
+        if help_count == 1:
+            response = "I've already told you once." + "\n" + help_response
+        if help_count >= 2:
+            count_resp = "{}".format(help_count) + "\n" + help_response
+            response = "I've already told you *{}* times".format(count_resp)
+        help_count += 1
 
     elif command == 'ping':
-        response = "Ashbot is active. Uptime: {} seconds".format(time.time()-start_time)
+        response = "Ashbot is active. Uptime: {} seconds".format(uptime)
 
-    elif command == "hey" or command == "hi":
-        response = "Hello friend."
+    elif command == "hey" or command == "hi" or command == "hello":
+        response = "Aloha"
+
+    elif command == "yo" or command == "whats up":
+        response = "What's up?"
 
     elif command == 'k':
         response = "k"
 
-    elif command == 'tell me a joke':
+    elif command == "whats on your mind":
         response = "{}".format(random_joke)
 
     elif command == "thanks" or command == "thank you":
-        response = "Don't mention it."
+        response = "Don't mention it.\nSeriously."
+
+    elif command == "as-salamu alaykum":
+        response = "wa ʿalaykumu s-salām"
 
     elif command == 'quit' or command == "exit":
-        response = "Ashbot is now terminating!"
-        running_flag = False
+        response = exit_response
+        # send a sigterm signal to shutdown the bot
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    responses = response or default_response
 
     # Sends the response back to the channel
     slack_client.api_call(
         "chat.postMessage",
         channel=channel,
-        text=response or default_response
+        text=responses
     )
+
+    logger.info("RESPONSE: '{}'\n".format(responses))
 
 
 if __name__ == "__main__":
-    channel_random_url = 'https://hooks.slack.com/services/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'
-    channel_test_url = 'https://hooks.slack.com/services/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'
-    payload = {"text": "Hello, World!"}
+    """     below are urls for each channel. Whichever one is used,
+            the bot will announce itself to the channel that it's online
+    """
+    logger.info('Connecting...')
+    channel_random_url = '''
+https://hooks.slack.com/services/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
+'''
+    channel_test_url = '''
+https://hooks.slack.com/services/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
+'''
+    payload = {"text": "sup"}
     start_time = time.time()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     if slack_client.rtm_connect(with_team_state=False):
-        print("Ashbot connected and running!")
+        logger.info('Connected to channel. listening...')
         # Read bot's user ID by calling Web API method `auth.test`
         starterbot_id = slack_client.api_call("auth.test")["user_id"]
+        # announce to the channel that we're online
         r = requests.post(channel_test_url, json=payload)
 
+        # true unless sigint or sigterm signal is sent
         while running_flag:
             command, channel = parse_bot_commands(slack_client.rtm_read())
-            if command:
-                handle_command(command, channel)
-            time.sleep(RTM_READ_DELAY)
+            try:
+                if command:
+                    handle_command(command, channel)
+                    time.sleep(RTM_READ_DELAY)
+
+            except Exception:
+                logger.exception("EXCEPTION")
     else:
-        print("Connection failed. Exception traceback printed above.")
+        logger.info("Ashbot can't connect. Shutting down.")
         sys.exit()
