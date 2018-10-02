@@ -27,6 +27,7 @@ ipython-genutils==0.2.0
 isort==4.3.4
 itsdangerous==0.24
 Jinja2==2.10
+jokes==0.1.7
 lazy-object-proxy==1.3.1
 lxml==4.2.4
 MarkupSafe==1.0
@@ -53,7 +54,9 @@ pylint==1.9.3
 pyparsing==2.2.0
 pyPdf==1.13
 PyPDF2==1.26.0
+pytemperature==1.0
 pytest==3.8.0
+python-dateutil==2.7.3
 python-pptx==0.6.5
 PyYAML==3.13
 requests==2.19.1
@@ -70,8 +73,9 @@ urllib3==1.23
 virtualenv==16.0.0
 virtualenv-clone==0.3.0
 watchdog==0.9.0
+watson-developer-cloud==2.0.1
 wcwidth==0.1.7
-websocket-client==0.52.0
+websocket-client==0.47.0
 Werkzeug==0.14.1
 wrapt==1.10.11
 xlrd==1.0.0

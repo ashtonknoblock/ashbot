@@ -9,7 +9,9 @@ import string
 import logging
 import signal
 import jokes
+import pytemperature
 from slackclient import SlackClient
+from logging.handlers import RotatingFileHandler
 
 # constants
 RTM_READ_DELAY = 1  # 1 second delay between reading from RTM
@@ -26,7 +28,9 @@ joke = jokes.jokes
 # setup the logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler('log.txt')
+file_handler = RotatingFileHandler(
+    'ashbot.log', mode = 'a', maxBytes = 5 * 1024 * 1024, backupCount = 2,
+    encoding = None, delay = 0)
 formatter = logging.Formatter(
     "%(asctime)s: %(levelname)s:    %(message)s")
 file_handler.setFormatter(formatter)
@@ -40,22 +44,14 @@ starterbot_id = None
 
 def signal_handler(sig_num, frame):
     """
-            if we get a sigint or sigterm signal, exit program
+            Logs int and term signals
     """
     global running_flag
-    global start_time
-    uptime = (time.time()-start_time)
-    sigint_log = """SIGINT signal detected... Ashbot disconnected.
-                \nUptime was {} seconds.\n\n""".format(uptime)
-
-    sigterm_log = """SIGTERM signal detected...Disconnected.
-                \nUptime was {} seconds.\n\n""".format(uptime)
+    logger.warning("signal detected: {}".format(sig_num))
     if sig_num == signal.SIGINT:
-        logger.info(sigint_log)
         running_flag = False
     if sig_num == signal.SIGTERM:
         running_flag = False
-        logger.info(sigterm_log)
     return None
 
 
@@ -68,7 +64,7 @@ def parse_bot_commands(slack_events):
         If its not found, then this function returns None, None.
     """
     for event in slack_events:
-        if event["type"] == "message" and not "subtype" in event:
+        if event["type"] == "message" and "subtype" not in event:
             user_id, message = parse_direct_mention(event["text"])
             if user_id == starterbot_id:
                 return message, event["channel"]
@@ -116,6 +112,59 @@ def cleaning(text):
     return text
 
 
+def get_local_weather():
+    weather = []
+    r = requests.get('http://api.openweathermap.org/data/2.5/weather?zip=46204&APPID=c5dbe8cac6dbbc3c486534852fb410c7')
+    data = r.json()
+    description = data['weather'][0]['description']
+    low_temp = data['main']['temp_min']
+    high_temp = data['main']['temp_max']
+
+    description
+    high = pytemperature.k2f(high_temp) 
+    low = pytemperature.k2f(low_temp)
+
+    weather.append(description)
+    weather.append(high)
+    weather.append(low)
+
+    return weather
+
+
+def cat_img_url():
+    url = "https://api.thecatapi.com/v1/images/search"
+
+    querystring = {"format":"json"}
+
+    headers = {
+        'Content-Type': "application/json",
+        'x-api-key': "97620cd9-4b37-4e4e-a885-df479ab88660"
+        }
+
+    response = requests.request("GET", url, headers=headers, params=querystring)
+
+    cat = response.json()
+    cat_pic_url = cat[0]['url']
+    return cat_pic_url
+
+
+def post_cat_img():
+    cat = cat_img_url()
+    channel_test_url = '''
+https://hooks.slack.com/services/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
+'''
+    payload = {
+        "attachments": [
+            {
+            "image_url": cat,
+            "text": "here's a cat" 
+            }
+        ]
+    }
+    r = requests.post(channel_test_url, json=payload)
+    return r
+
+
 def handle_command(command, channel):
     """
         Executes bot command
@@ -129,8 +178,8 @@ def handle_command(command, channel):
 `help-- display commands you can tell me.`
 `ping-- check if/how long I've been active`
 `whats on your mind-- ???`
-`quit-- make me exit and stop listening`
-`exit-- same a quit`
+`weather-- show the high and low temp for Indy`
+`cat-- random cat image to brighten your day`
     """
     exit_response = """
 Life and destiny can steal my best friend away from me
@@ -154,6 +203,11 @@ Life and destiny can steal my best friend away from me
             response = "I've already told you *{}* times".format(count_resp)
         help_count += 1
 
+    elif command == 'cat':
+        post_cat_img()
+        response = None
+        default_response = None
+
     elif command == 'ping':
         response = "Ashbot is active. Uptime: {} seconds".format(uptime)
 
@@ -175,7 +229,14 @@ Life and destiny can steal my best friend away from me
     elif command == "as-salamu alaykum":
         response = "wa ʿalaykumu s-salām"
 
-    elif command == 'quit' or command == "exit":
+    elif command == 'weather' or command == "whats the weather like today":
+        temps = get_local_weather()
+        high = temps[1]
+        low = temps[2]
+        response = "The low in Indy today is {}, with a high of {}.".format(low,high)
+
+
+    elif command == 'die':
         response = exit_response
         # send a sigterm signal to shutdown the bot
         os.kill(os.getpid(), signal.SIGTERM)
@@ -210,7 +271,7 @@ https://hooks.slack.com/services/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
     signal.signal(signal.SIGTERM, signal_handler)
 
     if slack_client.rtm_connect(with_team_state=False):
-        logger.info('Connected to channel. listening...')
+        logger.info('Ashbot is up and running!')
         # Read bot's user ID by calling Web API method `auth.test`
         starterbot_id = slack_client.api_call("auth.test")["user_id"]
         # announce to the channel that we're online
@@ -218,14 +279,17 @@ https://hooks.slack.com/services/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
 
         # true unless sigint or sigterm signal is sent
         while running_flag:
-            command, channel = parse_bot_commands(slack_client.rtm_read())
             try:
+                command, channel = parse_bot_commands(slack_client.rtm_read())
                 if command:
                     handle_command(command, channel)
-                    time.sleep(RTM_READ_DELAY)
-
+                time.sleep(RTM_READ_DELAY)
             except Exception:
-                logger.exception("EXCEPTION")
+                logger.exception(Exception)
+                logger.info("Restarting...")
+                time.sleep(5)
+        logger.info("Shutting down. uptime: {} seconds.".format(
+            time.time() - start_time))
     else:
-        logger.info("Ashbot can't connect. Shutting down.")
+        logger.exception("Connection Failed")
         sys.exit()
