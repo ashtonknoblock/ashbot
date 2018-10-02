@@ -3,7 +3,5 @@
 # test/
 .noseids
 .pytest_cache/
-startbot.pyc
-log.txt
-jokes.pyc
-Pipfile
+*.log
+*.pyc

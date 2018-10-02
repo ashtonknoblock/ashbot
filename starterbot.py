@@ -8,7 +8,6 @@ import random
 import string
 import logging
 import signal
-import jokes
 import pytemperature
 from slackclient import SlackClient
 from logging.handlers import RotatingFileHandler
