@@ -116,7 +116,7 @@ def parse_direct_mention(message_text):
 
 def cleaning(text):
     """
-        Takes received message, and removes
+        Takes recieved message, and removes
         new lines, punctuation, white space, and any capitalization
     """
     # don't parse special commands
@@ -299,26 +299,27 @@ https://hooks.slack.com/services/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
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if slack_client.rtm_connect(with_team_state=False):
-        logger.info('Ashbot is up and running!')
-        # Read bot's user ID by calling Web API method `auth.test`
-        starterbot_id = slack_client.api_call("auth.test")["user_id"]
-        # announce to the channel that we're online
-        r = requests.post(channel_test_url, json=payload)
-
-        # true unless sigint or sigterm signal is sent
-        while running_flag:
-            try:
-                command, channel = parse_bot_commands(slack_client.rtm_read())
-                if command:
-                    handle_command(command, channel)
-                time.sleep(RTM_READ_DELAY)
-            except Exception:
-                logger.exception(Exception)
-                logger.info("Restarting...")
-                time.sleep(5)
+    # true unless sigint or sigterm signal is sent
+    while running_flag:
+        if slack_client.rtm_connect(with_team_state=False):
+            logger.info('Ashbot is up and running!')
+            # Read bot's user ID by calling Web API method `auth.test`
+            starterbot_id = slack_client.api_call("auth.test")["user_id"]
+            # announce to the channel that we're online
+            r = requests.post(channel_test_url, json=payload)
+            while running_flag:
+                try:
+                    command, channel = parse_bot_commands(slack_client.rtm_read())
+                    if command:
+                        handle_command(command, channel)
+                    time.sleep(RTM_READ_DELAY)
+                except Exception as e:
+                    logger.exception(e)
+                    logger.info("Restarting...")
+                    time.sleep(5)
+        else:
+            logger.exception("Connection Failed. Retrying in 5 seconds.")
+            time.sleep(5)
+        #running flag has turned false
         logger.info("Shutting down. uptime: {} seconds.".format(
             time.time() - start_time))
-    else:
-        logger.exception("Connection Failed")
-        sys.exit()
